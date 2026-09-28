@@ -996,6 +996,28 @@ class TestCuratorFasterPrune:
         assert raw["curator"]["archive_after_days"] == 180
 
 
+class TestCompressionTokenCapDefaultRemoved:
+    @pytest.mark.parametrize("seeded, kept", [(256000, False), (200000, True), (None, True)])
+    def test_v47_drops_only_the_seeded_256k_cap(self, tmp_path, monkeypatch, seeded, kept):
+        """The template and `doctor --fix` wrote the old 256000 default into config.yaml; only that
+        exact value goes. Another explicit cap and an explicit null are user choices and stay."""
+        from hermes_cli.config import DEFAULT_CONFIG
+        from hermes_cli.config_migrations import run_migrations
+
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text(yaml.safe_dump({
+            "_config_version": 46,
+            "compression": {"threshold": 0.5, "threshold_tokens": seeded},
+        }), encoding="utf-8")
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        run_migrations(46, {"env_added": [], "config_added": [], "warnings": []}, quiet=True)
+        raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        assert ("threshold_tokens" in raw["compression"]) is kept
+        assert raw["compression"]["threshold"] == 0.5
+        if not kept:
+            assert DEFAULT_CONFIG["compression"]["threshold_tokens"] != seeded
+
+
 class TestCustomProviderCompatibility:
     """Custom provider compatibility across legacy and v12+ config schemas.
 
